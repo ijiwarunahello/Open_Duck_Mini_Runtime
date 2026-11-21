@@ -71,7 +71,7 @@ class BenchState:
 
     # --- periodic ------------------------------------------------------
     def poll_feet(self, now: float | None = None) -> None:
-        t = self.clock() if now is None else now
+        t = time.time() if now is None else now  # wall clock so the log reads as time of day
         feet = self.hw.read_feet()
         for name, level in feet.items():
             self.edges.update(name, level, t)

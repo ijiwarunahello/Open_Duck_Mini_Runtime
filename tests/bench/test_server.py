@@ -120,3 +120,13 @@ def test_static_path_traversal_blocked(server_url):
 
 def test_ear_limit_above_one_rejected():
     assert main(["--fake", "--ear-limit", "1.5"]) == 2
+
+
+def test_edge_times_are_wall_clock():
+    hw = FakeHardware()
+    st = BenchState(hw, clock=lambda: 5.0)
+    hw.read_feet = lambda: {"左足": 1, "右足": 1}
+    st.poll_feet()
+    hw.read_feet = lambda: {"左足": 0, "右足": 1}
+    st.poll_feet()
+    assert st.snapshot()["edges"][-1][0] > 1_000_000_000
