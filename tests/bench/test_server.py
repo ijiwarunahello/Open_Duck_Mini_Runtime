@@ -130,3 +130,20 @@ def test_edge_times_are_wall_clock():
     hw.read_feet = lambda: {"左足": 0, "右足": 1}
     st.poll_feet()
     assert st.snapshot()["edges"][-1][0] > 1_000_000_000
+
+
+def test_ear_pwm_released_after_idle():
+    hw = FakeHardware()
+    t = [0.0]
+    st = BenchState(hw, clock=lambda: t[0])
+    st.handle("ear", {"side": "左", "value": 0.2})
+    t[0] = 0.4
+    st.tick()
+    assert ("release_ear", "左") not in hw.calls
+    st.handle("ear", {"side": "左", "value": 0.3})
+    t[0] = 0.8
+    st.tick()
+    assert ("release_ear", "左") not in hw.calls
+    t[0] = 0.95
+    st.tick()
+    assert hw.calls[-1] == ("release_ear", "左")

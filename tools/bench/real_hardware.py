@@ -71,6 +71,12 @@ class RealHardware:
         else:
             pwm.ChangeDutyCycle(duty)
 
+    def release_ear(self, side: str) -> None:
+        """Stop the software PWM; the SG90 holds roughly in place by gear friction, without jitter."""
+        pwm = self._ear_pwm.pop(side, None)
+        if pwm is not None:
+            pwm.stop()
+
     # --- IMU -------------------------------------------------------------
     def read_imu(self) -> ImuSample:
         if self._imu is None:

@@ -22,6 +22,7 @@ from tools.bench.signals import EdgeLog, to_runtime_frame
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 LED_TIMEOUT_S = 30.0
+EAR_HOLD_S = 0.5  # stop the software PWM after the ear has had time to reach its position (avoids jitter)
 SSE_PERIOD_S = 0.1
 FEET_PERIOD_S = 0.01
 PINS_PERIOD_S = 0.5
@@ -39,6 +40,7 @@ class BenchState:
         self.edges = EdgeLog()
         self.imu_errors = 0
         self.led_until: dict[str, float] = {}
+        self.ear_release_at: dict[str, float] = {}
         self.last_jpeg: bytes | None = None
         self._target: float | None = None
         self._clients = 0
@@ -68,6 +70,7 @@ class BenchState:
         self.guard.active = None
         self._target = None
         self.led_until.clear()
+        self.ear_release_at.clear()
 
     # --- periodic ------------------------------------------------------
     def poll_feet(self, now: float | None = None) -> None:
@@ -83,6 +86,10 @@ class BenchState:
             if now >= until:
                 del self.led_until[name]
                 self.hw.set_led(name, 0)
+        for side, at in list(self.ear_release_at.items()):
+            if now >= at:
+                del self.ear_release_at[side]
+                self.hw.release_ear(side)
 
     def _every(self, key: str, period: float, fn):
         now = self.clock()
@@ -205,6 +212,7 @@ class BenchState:
             raise ValueError(f"耳の左右が違います: {side}")
         value = max(-self.ear_limit, min(self.ear_limit, value))
         self.hw.set_ear(side, value, self.ear_limit)
+        self.ear_release_at[side] = self.clock() + EAR_HOLD_S
 
     def _do_tone(self, body: dict) -> None:
         freq, volume = int(body.get("freq", 440)), float(body.get("volume", 0.1))
