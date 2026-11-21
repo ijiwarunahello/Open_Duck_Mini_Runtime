@@ -40,6 +40,7 @@ class RealHardware:
             pwm.start(0)
             self._led_pwm[name] = pwm
         self._ear_pwm: dict[str, object] = {}  # created on first use so the ears do not move at start
+        self._ear_lock = threading.Lock()  # API threads set, the timer thread releases
         self._imu = None
         self._io = None
         self._io_lock = threading.Lock()
@@ -62,20 +63,22 @@ class RealHardware:
     def set_ear(self, side: str, value: float, limit: float) -> None:
         pin, sign = EAR_PINS[side]
         duty = ear_duty_percent(value, limit, sign)
-        pwm = self._ear_pwm.get(side)
-        if pwm is None:
-            GPIO.setup(pin, GPIO.OUT)
-            pwm = GPIO.PWM(pin, EAR_PWM_HZ)
-            pwm.start(duty)
-            self._ear_pwm[side] = pwm
-        else:
-            pwm.ChangeDutyCycle(duty)
+        with self._ear_lock:
+            pwm = self._ear_pwm.get(side)
+            if pwm is None:
+                GPIO.setup(pin, GPIO.OUT)
+                pwm = GPIO.PWM(pin, EAR_PWM_HZ)
+                pwm.start(duty)
+                self._ear_pwm[side] = pwm
+            else:
+                pwm.ChangeDutyCycle(duty)
 
     def release_ear(self, side: str) -> None:
         """Stop the software PWM; the SG90 holds roughly in place by gear friction, without jitter."""
-        pwm = self._ear_pwm.pop(side, None)
-        if pwm is not None:
-            pwm.stop()
+        with self._ear_lock:
+            pwm = self._ear_pwm.pop(side, None)
+            if pwm is not None:
+                pwm.stop()
 
     # --- IMU -------------------------------------------------------------
     def read_imu(self) -> ImuSample:
@@ -176,7 +179,15 @@ class RealHardware:
             io.set_P_coefficient({servo_id: kp})
             pos_deg = io.get_present_position([servo_id])[0]
             io.set_goal_position({servo_id: pos_deg})
-            io.enable_torque([servo_id])
+            try:
+                io.enable_torque([servo_id])
+            except Exception:
+                # The servo may have latched torque even though its reply was lost: release it before reporting.
+                try:
+                    io.disable_torque([servo_id])
+                except Exception:
+                    self._torque.add(servo_id)  # unknown state: keep it listed so stop_all retries it
+                raise
             self._torque.add(servo_id)
         return math.radians(pos_deg)
 
@@ -191,17 +202,21 @@ class RealHardware:
 
     # --- safety / status -------------------------------------------------
     def stop_all(self) -> None:
-        with self._io_lock:
-            try:
-                self._servo_io().disable_torque(list(JOINTS))
-            except Exception:
-                self._drop_io()
-            self._torque.clear()
+        """LEDs and ears always stop; raises if the torque release failed twice (torque may still be on)."""
         for pwm in self._led_pwm.values():
             pwm.ChangeDutyCycle(0)
-        for pwm in self._ear_pwm.values():
-            pwm.stop()
-        self._ear_pwm.clear()
+        for side in list(self._ear_pwm):
+            self.release_ear(side)
+        with self._io_lock:
+            for attempt in range(2):
+                try:
+                    self._servo_io().disable_torque(list(JOINTS))
+                    self._torque.clear()
+                    return
+                except Exception:
+                    self._drop_io()  # reopen and retry once (transient timeout, re-plugged USB)
+                    if attempt == 1:
+                        raise
 
     def pi_status(self) -> dict:
         throttled = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True, timeout=2).stdout

@@ -1,6 +1,7 @@
 """Hardware interface used by the bench server, plus a fake backend for the PC and tests."""
 
 import random
+import subprocess
 import time
 from dataclasses import dataclass, replace
 from typing import Protocol
@@ -72,6 +73,9 @@ class FakeHardware:
         self.calls: list[tuple] = []
         self.fail_imu = False
         self.fail_servos = False
+        self.fail_stop = False
+        self.fail_status = False
+        self.fail_pins = False
         self._feet = {"左足": 1, "右足": 1}
         self._t0 = time.monotonic()
         self._servos = {
@@ -80,6 +84,8 @@ class FakeHardware:
         }
 
     def read_pins(self) -> dict[int, PinState]:
+        if self.fail_pins:
+            raise subprocess.TimeoutExpired("pinctrl", 2)
         pins: dict[int, PinState] = {}
         for bcm in (v for v in HEADER.values() if isinstance(v, int)):
             level = 1
@@ -145,8 +151,12 @@ class FakeHardware:
 
     def stop_all(self) -> None:
         self.calls.append(("stop_all",))
+        if self.fail_stop:
+            raise OSError("fake torque release failure")
         for r in self._servos.values():
             r.torque = False
 
     def pi_status(self) -> dict:
+        if self.fail_status:
+            raise subprocess.TimeoutExpired("vcgencmd", 2)
         return {"throttled": "0x0", "cpu_temp": 45.0, "uptime_s": int(time.monotonic() - self._t0)}

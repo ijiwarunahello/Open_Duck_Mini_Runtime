@@ -9,6 +9,7 @@ import json
 import math
 import os
 import signal
+import socket
 import sys
 import threading
 import time
@@ -29,6 +30,18 @@ PINS_PERIOD_S = 0.5
 SERVOS_PERIOD_S = 1.0
 STATUS_PERIOD_S = 2.0
 MAX_EAR_LIMIT = 1.0
+STREAM_USER_TIMEOUT_MS = 5000  # drop an SSE client whose data goes unacknowledged this long (Wi-Fi gone, laptop asleep)
+
+
+def configure_stream_socket(sock: socket.socket) -> None:
+    """Make a silently vanished client fail the next write within seconds, so stop_all runs."""
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    if hasattr(socket, "TCP_USER_TIMEOUT"):
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, STREAM_USER_TIMEOUT_MS)
+    if hasattr(socket, "TCP_KEEPIDLE"):
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 2)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 1)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
 
 
 class BenchState:
@@ -62,15 +75,19 @@ class BenchState:
             last = self._clients <= 0
             self._clients = max(self._clients, 0)
         if last:
-            self.stop_all()
+            try:
+                self.stop_all()
+            except Exception as e:
+                print(f"bench: 停止処理に失敗しました (トルクが残っている可能性があります): {e}", file=sys.stderr)
 
     def stop_all(self) -> None:
-        with self._servo_lock:
-            self.hw.stop_all()
-        self.guard.active = None
-        self._target = None
+        """Raises if the torque release failed; the active axis is then kept so the UI still shows it."""
         self.led_until.clear()
         self.ear_release_at.clear()
+        with self._servo_lock:
+            self.hw.stop_all()
+            self.guard.active = None
+            self._target = None
 
     # --- periodic ------------------------------------------------------
     def poll_feet(self, now: float | None = None) -> None:
@@ -84,11 +101,11 @@ class BenchState:
         now = self.clock()
         for name, until in list(self.led_until.items()):
             if now >= until:
-                del self.led_until[name]
+                self.led_until.pop(name, None)
                 self.hw.set_led(name, 0)
         for side, at in list(self.ear_release_at.items()):
             if now >= at:
-                del self.ear_release_at[side]
+                self.ear_release_at.pop(side, None)
                 self.hw.release_ear(side)
 
     def _every(self, key: str, period: float, fn):
@@ -97,6 +114,20 @@ class BenchState:
             self._cache[key] = fn()
             self._cache_t[key] = now
         return self._cache[key]
+
+    def _read_status(self) -> dict:
+        try:
+            return {**self.hw.pi_status(), "error": None}
+        except Exception as e:  # vcgencmd timeout, ...
+            prev = {k: v for k, v in self._cache.get("status", {}).items() if k != "error"}
+            return {"throttled": "?", "cpu_temp": None, "uptime_s": None, **prev, "error": f"読み取りエラー: {e}"}
+
+    def _read_pins_safe(self) -> dict:
+        try:
+            return {"pins": self._read_pins(), "error": None}
+        except Exception as e:  # pinctrl timeout, ...
+            prev = self._cache.get("pins", {}).get("pins", {})
+            return {"pins": prev, "error": f"読み取りエラー: {e}"}
 
     def _read_pins(self) -> dict:
         return {
@@ -148,10 +179,12 @@ class BenchState:
         if "feet" not in self._cache:
             self.poll_feet()
         servos = self._every("servos", SERVOS_PERIOD_S, self._read_servos)
+        pins = self._every("pins", PINS_PERIOD_S, self._read_pins_safe)
         now = self.clock()
         return {
-            "status": self._every("status", STATUS_PERIOD_S, self.hw.pi_status),
-            "pins": self._every("pins", PINS_PERIOD_S, self._read_pins),
+            "status": self._every("status", STATUS_PERIOD_S, self._read_status),
+            "pins": pins["pins"],
+            "pins_error": pins["error"],
             "feet": self._cache["feet"],
             "edges": [list(e) for e in self.edges.events[-50:]],
             "chatter": dict(self.edges.chatter),
@@ -265,12 +298,15 @@ class BenchState:
 
     # --- background ----------------------------------------------------
     def start_feet_thread(self) -> threading.Thread:
+        """Polls the feet and runs the LED / ear timers, independent of whether any browser is connected."""
+
         def loop():
             while True:
-                try:
-                    self.poll_feet()
-                except Exception:
-                    pass
+                for fn in (self.poll_feet, self.tick):
+                    try:
+                        fn()
+                    except Exception:
+                        pass
                 time.sleep(FEET_PERIOD_S)
 
         t = threading.Thread(target=loop, daemon=True)
@@ -326,13 +362,18 @@ def make_server(state: BenchState, port: int) -> ThreadingHTTPServer:
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
+            configure_stream_socket(self.connection)
             state.client_connected()
             try:
                 while True:
-                    self.wfile.write(f"data: {state.snapshot_json()}\n\n".encode())
+                    try:
+                        payload = state.snapshot_json()
+                    except Exception as e:  # never let a reading bug end the stream (that would stop the servos)
+                        payload = json.dumps({"fatal": f"{type(e).__name__}: {e}"}, ensure_ascii=False)
+                    self.wfile.write(f"data: {payload}\n\n".encode())
                     self.wfile.flush()
                     time.sleep(SSE_PERIOD_S)
-            except (BrokenPipeError, ConnectionResetError, OSError):
+            except OSError:  # client gone (BrokenPipe, reset, TCP user timeout)
                 pass
             finally:
                 state.client_disconnected()
@@ -390,7 +431,10 @@ def main(argv: list[str] | None = None) -> int:
     state.start_feet_thread()
 
     def shutdown(signum, frame):
-        state.stop_all()
+        try:
+            state.stop_all()
+        except Exception as e:
+            print(f"bench: 停止処理に失敗しました (トルクが残っている可能性があります): {e}", file=sys.stderr)
         threading.Thread(target=srv.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, shutdown)
@@ -399,7 +443,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         srv.serve_forever()
     finally:
-        state.stop_all()
+        try:
+            state.stop_all()
+        except Exception as e:
+            print(f"bench: 停止処理に失敗しました (トルクが残っている可能性があります): {e}", file=sys.stderr)
         srv.server_close()
     return 0
 

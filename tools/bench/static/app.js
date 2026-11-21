@@ -211,6 +211,8 @@ function connect() {
   es.onerror = () => { $("conn").textContent = "切断"; $("conn").className = "conn off"; };
   es.onmessage = (ev) => {
     const s = JSON.parse(ev.data);
+    $("read-err").textContent = s.fatal || [s.status && s.status.error && `状態 ${s.status.error}`, s.pins_error && `GPIO ${s.pins_error}`].filter(Boolean).join(" / ");
+    if (s.fatal) return;
     updateStatus(s.status);
     updateGpio(s.pins);
     updateEdges(s.edges);
