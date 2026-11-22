@@ -18,7 +18,7 @@ from tools.bench.servo_logic import JOINTS
 from tools.bench.signals import ear_duty_percent
 
 SERVO_PORT = "/dev/ttyACM0"
-FEET_PINS = {"左足": 22, "右足": 27}
+FEET_PINS = {"左足": 17, "右足": 27}  # left moved off GPIO22: header pin 15 is broken on this Pi
 LED_PINS = {"左目": 24, "右目": 23, "プロジェクター": 25}
 LED_PWM_HZ = 500
 EAR_PINS = {"左": (13, 1), "右": (12, -1)}  # (BCM, sign) as in mini_bdx_runtime/antennas.py

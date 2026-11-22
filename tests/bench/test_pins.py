@@ -22,3 +22,26 @@ def test_parse_pinctrl_lines():
 def test_can_set_pull_only_free_pins():
     assert can_set_pull(5) and can_set_pull(26)
     assert not any(can_set_pull(b) for b in (0, 1, 4, 14, 15, 2, 22, 23, 27))
+
+
+def test_left_foot_moved_to_gpio17_and_gpio22_locked():
+    # Header pin 15 (GPIO22) is broken on this Pi; the left foot is wired to pin 11 (GPIO17).
+    from tools.bench.pins import ROLES
+
+    assert ROLES[17] == "左足"
+    assert ROLES[22].startswith("予約")
+    assert not can_set_pull(17) and not can_set_pull(22)
+
+
+def test_runtime_left_foot_pin_matches_bench():
+    import ast
+    import pathlib
+
+    src = pathlib.Path("mini_bdx_runtime/mini_bdx_runtime/feet_contacts.py").read_text()
+    pins = {
+        n.targets[0].id: ast.unparse(n.value)
+        for n in ast.parse(src).body
+        if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name)
+    }
+    assert pins["LEFT_FOOT_PIN"] == "board.D17"
+    assert pins["RIGHT_FOOT_PIN"] == "board.D27"

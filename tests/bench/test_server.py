@@ -24,7 +24,7 @@ def test_set_pull_rejects_reserved_pin(server_url):
 
 
 def test_set_pull_rejects_in_use_pin(server_url):
-    r = post(server_url, "set_pull", {"bcm": 22, "pull": "pd"})
+    r = post(server_url, "set_pull", {"bcm": 17, "pull": "pd"})
     assert r.status == 400 and "使用中" in r.json()["error"]
 
 

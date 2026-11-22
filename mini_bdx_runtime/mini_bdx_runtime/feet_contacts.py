@@ -2,7 +2,8 @@ import board
 import digitalio
 import time
 
-LEFT_FOOT_PIN = board.D22
+# ducktronics: header pin 15 (GPIO22) is broken on this Pi, so the left foot is wired to pin 11 (GPIO17)
+LEFT_FOOT_PIN = board.D17
 RIGHT_FOOT_PIN = board.D27
 
 class FeetContacts:
