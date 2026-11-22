@@ -16,6 +16,7 @@ dependencies = [
     "pygame==2.6.0",
     "pypot @ git+https://github.com/pollen-robotics/pypot@support-feetech-sts3215",
     "openai==1.70.0",
+    "RPi.GPIO==0.7.1; sys_platform == 'linux' and platform_machine == 'aarch64'",
 ]
 
 [build-system]
