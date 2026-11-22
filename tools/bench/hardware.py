@@ -89,14 +89,14 @@ class FakeHardware:
         pins: dict[int, PinState] = {}
         for bcm in (v for v in HEADER.values() if isinstance(v, int)):
             level = 1
-            if bcm == 22:
+            if bcm == 17:
                 level = self._feet["左足"]
             elif bcm == 27:
                 level = self._feet["右足"]
             elif bcm in (14, 23, 24, 25):
                 level = 0
             func = "a0" if bcm in (18, 19, 20, 21) else "ip"
-            pull = "pu" if bcm in (22, 27) else "--"
+            pull = "pu" if bcm in (17, 27) else "--"
             pins[bcm] = PinState(bcm, func, pull, level)
         return pins
 

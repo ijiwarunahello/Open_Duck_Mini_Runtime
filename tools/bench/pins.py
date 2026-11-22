@@ -37,7 +37,7 @@ ROLES: dict[int, str] = {
     19: "I2S LRC",
     20: "マイク DOUT",
     21: "アンプ DIN",
-    22: "左足",
+    17: "左足",
     23: "右目",
     24: "左目",
     25: "プロジェクター",
@@ -47,10 +47,11 @@ ROLES: dict[int, str] = {
     4: "予約 (アンプ SD)",
     14: "予約 (UART TX)",
     15: "予約 (UART RX)",
+    22: "予約 (ヘッダのピン 15 が断線。左足は GPIO17 へ移した)",
 }
 
-RESERVED: frozenset[int] = frozenset({0, 1, 4, 14, 15})
-IN_USE: frozenset[int] = frozenset({2, 3, 12, 13, 18, 19, 20, 21, 22, 23, 24, 25, 27})
+RESERVED: frozenset[int] = frozenset({0, 1, 4, 14, 15, 22})
+IN_USE: frozenset[int] = frozenset({2, 3, 12, 13, 17, 18, 19, 20, 21, 23, 24, 25, 27})
 
 
 @dataclass(frozen=True)
