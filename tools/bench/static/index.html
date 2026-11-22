@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Duck bench</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="bar">
+  <div class="bar-status">
+    <span id="conn" class="conn off" aria-live="polite">切断</span>
+    <span>throttled <b id="st-throttled" class="mono">-</b></span>
+    <span>CPU <b id="st-temp" class="mono">-</b></span>
+    <span>稼働 <b id="st-uptime" class="mono">-</b></span>
+    <span id="read-err" class="err" role="alert"></span>
+  </div>
+  <button id="stop-all" class="danger" type="button">すべて止める</button>
+</header>
+
+<main>
+  <section class="panel wide" aria-labelledby="h-gpio">
+    <h2 id="h-gpio">GPIO</h2>
+    <div class="gpio-wrap">
+      <div class="scroll"><table class="gpio">
+        <thead><tr><th>pin</th><th>BCM</th><th>用途</th><th>機能</th><th>プル</th><th>レベル</th><th>プル変更</th></tr></thead>
+        <tbody id="gpio-body"></tbody>
+      </table></div>
+      <div class="log">
+        <h3>変化ログ</h3>
+        <ol id="edge-log" class="mono"></ol>
+      </div>
+    </div>
+    <p class="err" id="err-gpio" role="alert"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-feet">
+    <h2 id="h-feet">足スイッチ</h2>
+    <div class="feet">
+      <div class="foot" id="foot-左足"><span class="dot"></span><b>左</b><span class="state">-</span><span class="mono chatter">チャタリング 0</span></div>
+      <div class="foot" id="foot-右足"><span class="dot"></span><b>右</b><span class="state">-</span><span class="mono chatter">チャタリング 0</span></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-imu">
+    <h2 id="h-imu">IMU</h2>
+    <table class="kv mono">
+      <tr><th>センサ</th><td id="imu-sensor">-</td></tr>
+      <tr><th>Runtime false</th><td id="imu-rf">-</td></tr>
+      <tr><th>Runtime true</th><td id="imu-rt">-</td></tr>
+      <tr><th>gyro</th><td id="imu-gyro">-</td></tr>
+      <tr><th>|a|</th><td id="imu-norm">-</td></tr>
+      <tr><th>エラー</th><td id="imu-err">0</td></tr>
+    </table>
+  </section>
+
+  <section class="panel" aria-labelledby="h-led">
+    <h2 id="h-led">LED</h2>
+    <div class="rows" id="led-rows"></div>
+    <p class="note">点灯は 30 秒で自動的に消えます</p>
+    <p class="err" id="err-led" role="alert"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-ear">
+    <h2 id="h-ear">耳</h2>
+    <div class="rows">
+      <label class="row" for="ear-左"><span>左</span><input id="ear-左" type="range" min="-1" max="1" step="0.05" value="0"><output id="ear-左-v" class="mono">0.00</output></label>
+      <label class="row" for="ear-右"><span>右</span><input id="ear-右" type="range" min="-1" max="1" step="0.05" value="0"><output id="ear-右-v" class="mono">0.00</output></label>
+    </div>
+    <button id="ear-center" type="button">中央へ</button>
+    <p class="err" id="err-ear" role="alert"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-spk">
+    <h2 id="h-spk">スピーカー</h2>
+    <div class="rows">
+      <label class="row" for="tone-freq"><span>周波数</span><input id="tone-freq" type="number" min="50" max="5000" value="440"><span class="unit">Hz</span></label>
+      <label class="row" for="tone-vol"><span>音量</span><input id="tone-vol" type="range" min="0" max="100" value="10"><output id="tone-vol-v" class="mono">10%</output></label>
+    </div>
+    <button id="tone-play" type="button">鳴らす (2 秒)</button>
+    <p class="err" id="err-spk" role="alert"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-cam">
+    <h2 id="h-cam">カメラ</h2>
+    <div class="cam-controls">
+      <button id="cam-capture" type="button">撮る</button>
+      <label for="cam-rot">回転</label>
+      <select id="cam-rot"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select>
+    </div>
+    <div class="cam-frame"><img id="cam-img" alt="カメラの画像" hidden></div>
+    <p class="err" id="err-cam" role="alert"></p>
+  </section>
+
+  <section class="panel wide" aria-labelledby="h-servo">
+    <h2 id="h-servo">サーボ</h2>
+    <p class="err" id="servo-bus-err" role="alert"></p>
+    <div class="scroll"><table class="servos">
+      <thead><tr><th>ID</th><th>関節</th><th>位置 rad</th><th>電圧</th><th>温度</th><th>状態</th><th>上限</th><th>操作</th></tr></thead>
+      <tbody id="servo-body"></tbody>
+    </table></div>
+    <p class="note">トルクは同時に 1 軸だけ。1 回 ±0.05 rad、トルクを入れた位置から累計 ±0.3 rad まで</p>
+    <p class="err" id="err-servo" role="alert"></p>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
