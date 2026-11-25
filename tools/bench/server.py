@@ -16,6 +16,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 
+from tools.bench.battery import summarize as summarize_battery
 from tools.bench.hardware import EARS, LEDS, Hardware
 from tools.bench.pins import IN_USE, RESERVED, ROLES, can_set_pull
 from tools.bench.servo_logic import JOINTS, KP_CHOICES, GuardError, JogGuard, decode_status
@@ -191,6 +192,7 @@ class BenchState:
             "imu": self._read_imu(),
             "servos": servos["rows"],
             "servo_error": servos["error"],
+            "battery": summarize_battery([] if servos["error"] else [r["voltage"] for r in servos["rows"]]),
             "led_remaining": {k: max(0.0, v - now) for k, v in self.led_until.items()},
             "active_servo": self.guard.active,
             "ear_limit": self.ear_limit,

@@ -228,3 +228,12 @@ def test_tick_tolerates_concurrent_stop_all():
     hw.set_led = set_led_then_clear
     st.led_until["右目"] = 0.0  # second entry: its delete happens after the clear
     st.tick()
+
+
+def test_battery_in_snapshot_and_hidden_on_bus_error():
+    hw = FakeHardware()
+    st = BenchState(hw)
+    assert st.snapshot()["battery"] == {"volts": 8.0, "level": "ok"}
+    hw.fail_servos = True
+    st._cache_t.pop("servos")
+    assert st.snapshot()["battery"] == {"volts": None, "level": None}
