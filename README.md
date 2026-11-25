@@ -150,6 +150,16 @@ Copy `example_config.json` in the home directory of your duck and rename it `duc
 
 In this file, you can configure some stuff, like registering if you installed the expression features, installed the imu upside down or and other stuff. You also write the joints offsets of your duck here
 
+### Check the IMU axes (fork addition)
+
+The policy expects the IMU frame X forward, Y left, Z up. Standing still, the accelerometer Z should read about +9.8. Tilt the robot forward (head down): the accelerometer X should become negative. Tilt it to its left: the accelerometer Y should become negative.
+
+- If Z is about -9.8, set `imu_upside_down` to `true`.
+- If Z is right but X and Y both have the wrong sign, set `imu_flip_xy` to `true`.
+- `imu_accel_bias` (`[x, y, z]`, m/s²) is added to the accelerometer. If the duck keeps falling backward, a positive X (for example `0.5`, about 3°) makes it lean forward.
+
+To run the walk without a controller, add `--no-commands`. The commands then stay at zero and the duck stands in place.
+
 ## Find the joints offsets
 
 This script will guide you through finding the joints offsets of your robot that you can then write in your `duck_config.json`

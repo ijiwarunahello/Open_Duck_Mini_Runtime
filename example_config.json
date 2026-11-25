@@ -1,6 +1,8 @@
 {
     "start_paused": false,
     "imu_upside_down": false,
+    "imu_flip_xy": false,
+    "imu_accel_bias": [0.0, 0.0, 0.0],
     "phase_frequency_factor_offset": 0.0,
     "expression_features": {
         "eyes": false,

@@ -9,13 +9,23 @@ from queue import Queue
 from threading import Thread
 import time
 
+from mini_bdx_runtime.imu_correction import correct_imu
+
 
 # TODO filter spikes
 class Imu:
     def __init__(
-        self, sampling_freq, user_pitch_bias=0, calibrate=False, upside_down=True
+        self,
+        sampling_freq,
+        user_pitch_bias=0,
+        calibrate=False,
+        upside_down=True,
+        flip_xy=False,
+        accel_bias=(0.0, 0.0, 0.0),
     ):
         self.sampling_freq = sampling_freq
+        self.flip_xy = flip_xy
+        self.accel_bias = accel_bias
         self.calibrate = calibrate
 
         i2c = busio.I2C(board.SCL, board.SDA)
@@ -137,6 +147,10 @@ class Imu:
                 continue
 
             accelero[0] -= self.x_offset
+
+            gyro, accelero = correct_imu(
+                gyro, accelero, flip_xy=self.flip_xy, accel_bias=self.accel_bias
+            )
 
             data = {
                 "gyro": gyro,

@@ -74,6 +74,8 @@ class RLWalk:
             sampling_freq=int(self.control_freq),
             user_pitch_bias=self.pitch_bias,
             upside_down=self.duck_config.imu_upside_down,
+            flip_xy=self.duck_config.imu_flip_xy,
+            accel_bias=self.duck_config.imu_accel_bias,
         )
 
         self.feet_contacts = FeetContacts()
@@ -360,9 +362,9 @@ if __name__ == "__main__":
     parser.add_argument("--pitch_bias", type=float, default=0, help="deg")
     parser.add_argument(
         "--commands",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="external commands, keyboard or gamepad. Launch control_server.py on host computer",
+        help="read commands from the Xbox controller (default). --no-commands runs without a controller and keeps the commands at zero, so the robot stands in place",
     )
     parser.add_argument(
         "--save_obs",

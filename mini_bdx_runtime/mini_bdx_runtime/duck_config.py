@@ -48,6 +48,11 @@ class DuckConfig:
 
         self.start_paused = self.json_config.get("start_paused", False)
         self.imu_upside_down = self.json_config.get("imu_upside_down", False)
+        # see imu_correction.py
+        self.imu_flip_xy = self.json_config.get("imu_flip_xy", False)
+        self.imu_accel_bias = self.json_config.get("imu_accel_bias", [0.0, 0.0, 0.0])
+        if len(self.imu_accel_bias) != 3:
+            raise ValueError("imu_accel_bias must be a list of 3 numbers [x, y, z]")
         self.phase_frequency_factor_offset = self.json_config.get(
             "phase_frequency_factor_offset", 0.0
         )
