@@ -1,6 +1,6 @@
 import pygame
 from threading import Thread
-from queue import Queue
+from queue import Queue, Empty
 import time
 import numpy as np
 from mini_bdx_runtime.buttons import Buttons
@@ -16,21 +16,32 @@ HEAD_PITCH_RANGE = [-0.78, 0.3]
 HEAD_YAW_RANGE = [-0.5, 0.5]
 HEAD_ROLL_RANGE = [-0.5, 0.5]
 
+# Commands fall back to zero (stand in place) when no fresh command has been
+# read for this long, e.g. when the reading thread is stuck or crashed.
+WATCHDOG_TIMEOUT = 0.5  # s
+
+
+def neutral_commands():
+    # Same layout as get_commands(): commands, A, B, X, Y, LB, RB, LT, RT, dpad up/down
+    return (np.zeros(7), False, False, False, False, False, False, 0.0, 0.0, 0)
+
 
 class XBoxController:
-    def __init__(self, command_freq, only_head_control=False):
+    def __init__(self, command_freq, only_head_control=False, start_worker=True):
         self.command_freq = command_freq
         self.head_control_mode = only_head_control
         self.only_head_control = only_head_control
 
         self.last_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.worker_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.last_left_trigger = 0.0
         self.last_right_trigger = 0.0
         pygame.init()
-        self.p1 = pygame.joystick.Joystick(0)
-        self.p1.init()
-        print(f"Loaded joystick with {self.p1.get_numaxes()} axes.")
+        self.p1 = None
+        self.p1_instance_id = None
+        self.wait_for_joystick()
         self.cmd_queue = Queue(maxsize=1)
+        self.last_command_time = time.time()
 
         self.A_pressed = False
         self.B_pressed = False
@@ -41,17 +52,67 @@ class XBoxController:
 
         self.buttons = Buttons()
 
-        Thread(target=self.commands_worker, daemon=True).start()
+        if start_worker:
+            Thread(target=self.commands_worker, daemon=True).start()
+
+    def wait_for_joystick(self):
+        announced = False
+        while self.p1 is None:
+            pygame.event.get()  # lets SDL notice newly connected devices
+            if pygame.joystick.get_count() > 0:
+                self.open_joystick(0)
+                break
+            if not announced:
+                print("Waiting for the controller...")
+                announced = True
+            time.sleep(0.5)
+
+    def open_joystick(self, device_index):
+        self.p1 = pygame.joystick.Joystick(device_index)
+        self.p1.init()
+        self.p1_instance_id = self.p1.get_instance_id()
+        print(f"Loaded joystick with {self.p1.get_numaxes()} axes.")
+
+    def release_buttons(self):
+        self.A_pressed = False
+        self.B_pressed = False
+        self.X_pressed = False
+        self.Y_pressed = False
+        self.LB_pressed = False
+        self.RB_pressed = False
 
     def commands_worker(self):
         while True:
-            self.cmd_queue.put(self.get_commands())
+            try:
+                commands = self.get_commands()
+            except Exception as e:
+                # Keep the thread alive. No command is queued meanwhile, so the
+                # watchdog in get_last_command() brings the commands to zero.
+                print(f"Controller read failed: {e}")
+                time.sleep(WATCHDOG_TIMEOUT)
+                continue
+            self.cmd_queue.put(commands)
             time.sleep(1 / self.command_freq)
 
     def get_commands(self):
-        last_commands = self.last_commands
-        left_trigger = self.last_left_trigger
-        right_trigger = self.last_right_trigger
+        events = pygame.event.get()
+        for event in events:
+            if (
+                event.type == pygame.JOYDEVICEREMOVED
+                and event.instance_id == self.p1_instance_id
+            ):
+                print("Controller disconnected, commands set to zero")
+                self.p1 = None
+                self.p1_instance_id = None
+            elif event.type == pygame.JOYDEVICEADDED and self.p1 is None:
+                self.open_joystick(event.device_index)
+
+        if self.p1 is None:
+            self.worker_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            self.release_buttons()
+            return neutral_commands()
+
+        last_commands = self.worker_commands
 
         l_x = -1 * self.p1.get_axis(0)
         l_y = -1 * self.p1.get_axis(1)
@@ -117,7 +178,7 @@ class XBoxController:
             last_commands[5] = head_yaw
             last_commands[6] = head_roll
 
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.JOYBUTTONDOWN:
 
                 if self.p1.get_button(0):  # A button
@@ -141,19 +202,13 @@ class XBoxController:
                     self.RB_pressed = True
 
             if event.type == pygame.JOYBUTTONUP:
-                self.A_pressed = False
-                self.B_pressed = False
-                self.X_pressed = False
-                self.Y_pressed = False
-                self.LB_pressed = False
-                self.RB_pressed = False
+                self.release_buttons()
 
             # for i in range(10):
             #     if self.p1.get_button(i):
             #         print(f"Button {i} pressed")
 
         up_down = self.p1.get_hat(0)[1]
-        pygame.event.pump()  # process event queue
 
         return (
             np.around(last_commands, 3),
@@ -191,8 +246,12 @@ class XBoxController:
             ) = self.cmd_queue.get(
                 False
             )  # non blocking
-        except Exception:
-            pass
+            self.last_command_time = time.time()
+        except Empty:
+            if time.time() - self.last_command_time > WATCHDOG_TIMEOUT:
+                self.last_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+                self.last_left_trigger = 0.0
+                self.last_right_trigger = 0.0
 
         self.buttons.update(
             A_pressed,
