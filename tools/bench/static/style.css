@@ -29,6 +29,8 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--
   border-bottom: 1px solid var(--line); }
 .bar-status { display: flex; gap: 6px 18px; flex-wrap: wrap; align-items: center; color: var(--muted); }
 .bar-status b { color: var(--fg); font-weight: 500; }
+.bar-status b.low { color: var(--warn); font-weight: 700; }
+.bar-status b.critical { color: #fff; background: var(--danger); padding: 0 4px; border-radius: 3px; }
 .conn { padding: 1px 8px; border-radius: 10px; font-size: 12px; }
 .conn.on { color: var(--on); border: 1px solid currentColor; }
 .conn.off { color: #fff; background: var(--danger); }

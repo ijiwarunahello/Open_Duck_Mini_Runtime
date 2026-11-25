@@ -105,6 +105,13 @@ function updateStatus(st) {
   $("st-uptime").textContent = `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
 }
 
+function updateBattery(b) {
+  const el = $("st-battery");
+  el.textContent = b && b.volts !== null ? `${fmt(b.volts)} V` : "-";
+  el.classList.toggle("low", !!b && b.level === "low");
+  el.classList.toggle("critical", !!b && b.level === "critical");
+}
+
 // ---- LEDs ----
 const ledState = {};
 function buildLeds() {
@@ -214,6 +221,7 @@ function connect() {
     $("read-err").textContent = s.fatal || [s.status && s.status.error && `状態 ${s.status.error}`, s.pins_error && `GPIO ${s.pins_error}`].filter(Boolean).join(" / ");
     if (s.fatal) return;
     updateStatus(s.status);
+    updateBattery(s.battery);
     updateGpio(s.pins);
     updateEdges(s.edges);
     updateFeet(s.feet, s.chatter);
