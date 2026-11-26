@@ -157,6 +157,11 @@ The policy expects the IMU frame X forward, Y left, Z up. Standing still, the ac
 - If Z is about -9.8, set `imu_upside_down` to `true`.
 - If Z is right but X and Y both have the wrong sign, set `imu_flip_xy` to `true`.
 - `imu_accel_bias` (`[x, y, z]`, m/s²) is added to the accelerometer. If the duck keeps falling backward, a positive X (for example `0.5`, about 3°) makes it lean forward.
+- `imu_gyro_bias` (`[x, y, z]`, rad/s) is added to the gyro. The policy walks so that gyro Z matches the yaw command, so a gyro Z offset makes the duck turn while walking straight. Keep the duck still and run `cd scripts && python measure_imu_bias.py`; it prints the value to set (minus the mean at rest). The BNO055 keeps calibrating itself in NDOF mode, so measure again if the turn changes from day to day.
+
+### Walk straight (fork addition)
+
+`yaw_trim` (rad/s) is added to the yaw command while the forward or lateral command is non-zero, to cancel a steady turn that remains after `imu_gyro_bias`. Positive turns left. Start with ±0.05 and keep it small (the policy was trained with yaw commands within ±1.0). It is not applied when the duck stands or only turns in place, so the duck does not step by itself.
 
 To run the walk without a controller, add `--no-commands`. The commands then stay at zero and the duck stands in place.
 

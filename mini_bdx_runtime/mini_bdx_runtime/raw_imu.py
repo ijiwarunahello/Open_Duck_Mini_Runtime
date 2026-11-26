@@ -22,10 +22,12 @@ class Imu:
         upside_down=True,
         flip_xy=False,
         accel_bias=(0.0, 0.0, 0.0),
+        gyro_bias=(0.0, 0.0, 0.0),
     ):
         self.sampling_freq = sampling_freq
         self.flip_xy = flip_xy
         self.accel_bias = accel_bias
+        self.gyro_bias = gyro_bias
         self.calibrate = calibrate
 
         i2c = busio.I2C(board.SCL, board.SDA)
@@ -149,7 +151,11 @@ class Imu:
             accelero[0] -= self.x_offset
 
             gyro, accelero = correct_imu(
-                gyro, accelero, flip_xy=self.flip_xy, accel_bias=self.accel_bias
+                gyro,
+                accelero,
+                flip_xy=self.flip_xy,
+                accel_bias=self.accel_bias,
+                gyro_bias=self.gyro_bias,
             )
 
             data = {
