@@ -193,3 +193,14 @@ def test_deadzone_keeps_full_range_and_starts_from_zero(fake_pygame):
     assert c.get_commands()[0][0] == pytest.approx(0.15)
     c.p1.axes[1] = -(xc.STICK_DEADZONE + 0.01)  # just past the deadzone
     assert 0 < c.get_commands()[0][0] < 0.01
+
+
+def test_head_pitch_uses_the_range_of_its_side(fake_pygame):
+    c = make_controller()
+    c.head_control_mode = True
+    c.p1.axes[1] = -1.0  # left stick forward: head up
+    assert c.get_commands()[0][4] == pytest.approx(xc.HEAD_PITCH_RANGE[1])  # 0.3
+    c.p1.axes[1] = 1.0  # left stick back: head down
+    assert c.get_commands()[0][4] == pytest.approx(xc.HEAD_PITCH_RANGE[0])  # -0.78
+    c.p1.axes[1] = 0.0
+    assert c.get_commands()[0][4] == 0.0

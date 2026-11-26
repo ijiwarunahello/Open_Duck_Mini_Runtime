@@ -198,10 +198,13 @@ class XBoxController:
             else:
                 head_yaw *= np.abs(HEAD_YAW_RANGE[1])
 
+            # Positive (stick forward) is up: use the upper bound on that side.
+            # Upstream used the bounds the other way round, so the head looked
+            # up by 0.78 rad and down by only 0.3.
             if head_pitch >= 0:
-                head_pitch *= np.abs(HEAD_PITCH_RANGE[0])
-            else:
                 head_pitch *= np.abs(HEAD_PITCH_RANGE[1])
+            else:
+                head_pitch *= np.abs(HEAD_PITCH_RANGE[0])
 
             if head_roll >= 0:
                 head_roll *= np.abs(HEAD_ROLL_RANGE[0])
