@@ -244,8 +244,8 @@ class RLWalk:
                             print(f"Eyes: {self.eyes.cycle_mode()}")
 
                     if self.duck_config.antennas:
-                        self.antennas.set_position_left(right_trigger)
-                        self.antennas.set_position_right(left_trigger)
+                        self.antennas.set_position_left(left_trigger)
+                        self.antennas.set_position_right(right_trigger)
 
                     if self.buttons.A.triggered:
                         self.paused = not self.paused

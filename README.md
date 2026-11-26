@@ -187,7 +187,7 @@ Download the [latest policy checkpoint ](https://github.com/apirrone/Open_Duck_M
 - X to turn on/off the projector
 - B to play a random sound
 - Y to turn on/off head control (very experimental, I don't recommend trying that, it can break your duck's head)
-- left and right triggers to control the left and right antennas
+- left and right triggers to control the left and right antennas (fork: LT moves the duck's left ear, RT the right one; upstream crosses them)
 - LB (new!) press and hold to increase the walking frequency, kind of a sprint mode 🙂
 - RB (fork addition) to cycle the eyes: blink -> on -> off
 ```

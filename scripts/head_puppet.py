@@ -85,8 +85,8 @@ try:
         # hwi.set_position("neck_pitch", neck_pitch_pos_rad)
 
         if duck_config.antennas:
-            antennas.set_position_left(right_trigger)
-            antennas.set_position_right(left_trigger)
+            antennas.set_position_left(left_trigger)
+            antennas.set_position_right(right_trigger)
 
         if buttons.B.triggered:
             if duck_config.speaker:
