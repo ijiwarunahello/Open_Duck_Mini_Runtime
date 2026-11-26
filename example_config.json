@@ -3,6 +3,8 @@
     "imu_upside_down": false,
     "imu_flip_xy": false,
     "imu_accel_bias": [0.0, 0.0, 0.0],
+    "imu_gyro_bias": [0.0, 0.0, 0.0],
+    "yaw_trim": 0.0,
     "phase_frequency_factor_offset": 0.0,
     "expression_features": {
         "eyes": false,

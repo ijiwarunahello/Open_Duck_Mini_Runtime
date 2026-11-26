@@ -10,6 +10,10 @@ with the accelerometer reading about +9.8 on Z when the robot stands still.
   expects).
 - accel_bias: added to the accelerometer after the flip. A positive X makes the
   policy believe the robot leans backward, so it leans forward to compensate.
+- gyro_bias: added to the gyro after the flip. The policy walks so that gyro Z
+  matches the yaw command, so a gyro Z offset of b makes the robot turn at -b
+  while the command is zero. Set it to minus the mean gyro measured at rest
+  (scripts/measure_imu_bias.py).
 """
 
 import numpy as np
@@ -17,11 +21,18 @@ import numpy as np
 FLIP_XY = np.array([-1.0, -1.0, 1.0])
 
 
-def correct_imu(gyro, accelero, flip_xy=False, accel_bias=(0.0, 0.0, 0.0)):
+def correct_imu(
+    gyro,
+    accelero,
+    flip_xy=False,
+    accel_bias=(0.0, 0.0, 0.0),
+    gyro_bias=(0.0, 0.0, 0.0),
+):
     gyro = np.asarray(gyro, dtype=float)
     accelero = np.asarray(accelero, dtype=float)
     if flip_xy:
         gyro = gyro * FLIP_XY
         accelero = accelero * FLIP_XY
     accelero = accelero + np.asarray(accel_bias, dtype=float)
+    gyro = gyro + np.asarray(gyro_bias, dtype=float)
     return gyro, accelero

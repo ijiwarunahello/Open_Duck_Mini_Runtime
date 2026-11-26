@@ -53,6 +53,11 @@ class DuckConfig:
         self.imu_accel_bias = self.json_config.get("imu_accel_bias", [0.0, 0.0, 0.0])
         if len(self.imu_accel_bias) != 3:
             raise ValueError("imu_accel_bias must be a list of 3 numbers [x, y, z]")
+        self.imu_gyro_bias = self.json_config.get("imu_gyro_bias", [0.0, 0.0, 0.0])
+        if len(self.imu_gyro_bias) != 3:
+            raise ValueError("imu_gyro_bias must be a list of 3 numbers [x, y, z]")
+        # rad/s added to the yaw command while walking, see command_trim.py
+        self.yaw_trim = float(self.json_config.get("yaw_trim", 0.0))
         self.phase_frequency_factor_offset = self.json_config.get(
             "phase_frequency_factor_offset", 0.0
         )

@@ -39,6 +39,8 @@ def install_fakes(monkeypatch, events):
             self.imu_upside_down = False
             self.imu_flip_xy = False
             self.imu_accel_bias = [0.0, 0.0, 0.0]
+            self.imu_gyro_bias = [0.0, 0.0, 0.0]
+            self.yaw_trim = 0.0
             self.start_paused = False
             self.phase_frequency_factor_offset = 0.0
             self.eyes = self.projector = self.speaker = self.antennas = False
@@ -60,6 +62,7 @@ def install_fakes(monkeypatch, events):
         "projector": {"Projector": Noop},
         "rl_utils": {"make_action_dict": Noop, "LowPassActionFilter": Noop},
         "duck_config": {"DuckConfig": FakeDuckConfig},
+        "command_trim": {"apply_yaw_trim": Noop},
     }
     package = types.ModuleType("mini_bdx_runtime")
     package.__path__ = []

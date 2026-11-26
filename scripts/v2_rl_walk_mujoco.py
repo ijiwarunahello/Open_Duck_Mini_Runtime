@@ -15,6 +15,7 @@ from mini_bdx_runtime.antennas import Antennas
 from mini_bdx_runtime.projector import Projector
 from mini_bdx_runtime.rl_utils import make_action_dict, LowPassActionFilter
 from mini_bdx_runtime.duck_config import DuckConfig
+from mini_bdx_runtime.command_trim import apply_yaw_trim
 
 import os
 
@@ -82,6 +83,7 @@ class RLWalk:
             upside_down=self.duck_config.imu_upside_down,
             flip_xy=self.duck_config.imu_flip_xy,
             accel_bias=self.duck_config.imu_accel_bias,
+            gyro_bias=self.duck_config.imu_gyro_bias,
         )
 
         self.feet_contacts = FeetContacts()
@@ -213,6 +215,9 @@ class RLWalk:
                 if self.commands:
                     self.last_commands, self.buttons, left_trigger, right_trigger = (
                         self.xbox_controller.get_last_command()
+                    )
+                    self.last_commands = apply_yaw_trim(
+                        self.last_commands, self.duck_config.yaw_trim
                     )
                     if self.buttons.dpad_up.triggered:
                         self.phase_frequency_factor_offset += 0.05

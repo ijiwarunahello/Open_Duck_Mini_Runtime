@@ -28,6 +28,14 @@ def test_bias_is_added_after_flip():
     np.testing.assert_allclose(gyro, [0.0, 0.0, 0.0])
 
 
+def test_gyro_bias_is_added_after_flip():
+    gyro, acc = correct_imu(
+        [0.01, 0.0, 0.02], [0.0, 0.0, 9.8], flip_xy=True, gyro_bias=[0.0, 0.0, -0.02]
+    )
+    np.testing.assert_allclose(gyro, [-0.01, 0.0, 0.0])
+    np.testing.assert_allclose(acc, [0.0, 0.0, 9.8])
+
+
 def write_config(tmp_path, data):
     path = tmp_path / "duck_config.json"
     path.write_text(json.dumps(data))
@@ -46,6 +54,21 @@ def test_duck_config_imu_correction_defaults(tmp_path):
     cfg = DuckConfig(write_config(tmp_path, {}))
     assert cfg.imu_flip_xy is False
     assert cfg.imu_accel_bias == [0.0, 0.0, 0.0]
+    assert cfg.imu_gyro_bias == [0.0, 0.0, 0.0]
+    assert cfg.yaw_trim == 0.0
+
+
+def test_duck_config_reads_gyro_bias_and_yaw_trim(tmp_path):
+    cfg = DuckConfig(
+        write_config(tmp_path, {"imu_gyro_bias": [0, 0, -0.02], "yaw_trim": 0.05})
+    )
+    assert cfg.imu_gyro_bias == [0, 0, -0.02]
+    assert cfg.yaw_trim == 0.05
+
+
+def test_duck_config_rejects_bad_gyro_bias(tmp_path):
+    with pytest.raises(ValueError):
+        DuckConfig(write_config(tmp_path, {"imu_gyro_bias": [0.0, 0.0]}))
 
 
 def test_duck_config_rejects_bad_bias(tmp_path):
