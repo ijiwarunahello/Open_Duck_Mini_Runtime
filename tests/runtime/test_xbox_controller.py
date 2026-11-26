@@ -199,8 +199,8 @@ def test_head_pitch_uses_the_range_of_its_side(fake_pygame):
     c = make_controller()
     c.head_control_mode = True
     c.p1.axes[1] = -1.0  # left stick forward: head up
-    assert c.get_commands()[0][4] == pytest.approx(xc.HEAD_PITCH_RANGE[1])  # 0.3
+    assert c.get_commands()[0][4] == pytest.approx(xc.HEAD_PITCH_RANGE[1])  # 0.15
     c.p1.axes[1] = 1.0  # left stick back: head down
-    assert c.get_commands()[0][4] == pytest.approx(xc.HEAD_PITCH_RANGE[0])  # -0.78
+    assert c.get_commands()[0][4] == pytest.approx(xc.HEAD_PITCH_RANGE[0])  # -0.3
     c.p1.axes[1] = 0.0
     assert c.get_commands()[0][4] == 0.0
