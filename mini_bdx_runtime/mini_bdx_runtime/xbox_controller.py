@@ -12,7 +12,9 @@ YAW_RANGE = [-1.0, 1.0]
 
 # rads
 NECK_PITCH_RANGE = [-0.34, 1.1]
-HEAD_PITCH_RANGE = [-0.78, 0.3]
+# fork: down 0.3 rad (0.78 pulled the head cables), up 0.15 rad (0.3 looked
+# up too far on the duck), 2026-11-26
+HEAD_PITCH_RANGE = [-0.3, 0.15]
 HEAD_YAW_RANGE = [-0.5, 0.5]
 HEAD_ROLL_RANGE = [-0.5, 0.5]
 
@@ -198,10 +200,12 @@ class XBoxController:
             else:
                 head_yaw *= np.abs(HEAD_YAW_RANGE[1])
 
+            # Positive (stick forward) is up: use the upper bound on that side.
+            # Upstream used the bounds the other way round.
             if head_pitch >= 0:
-                head_pitch *= np.abs(HEAD_PITCH_RANGE[0])
-            else:
                 head_pitch *= np.abs(HEAD_PITCH_RANGE[1])
+            else:
+                head_pitch *= np.abs(HEAD_PITCH_RANGE[0])
 
             if head_roll >= 0:
                 head_roll *= np.abs(HEAD_ROLL_RANGE[0])
