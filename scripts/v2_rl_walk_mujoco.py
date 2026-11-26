@@ -239,6 +239,10 @@ class RLWalk:
                         if self.duck_config.speaker:
                             self.sounds.play_random_sound()
 
+                    if self.buttons.RB.triggered:
+                        if self.duck_config.eyes:
+                            print(f"Eyes: {self.eyes.cycle_mode()}")
+
                     if self.duck_config.antennas:
                         self.antennas.set_position_left(right_trigger)
                         self.antennas.set_position_right(left_trigger)

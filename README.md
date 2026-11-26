@@ -189,7 +189,9 @@ Download the [latest policy checkpoint ](https://github.com/apirrone/Open_Duck_M
 - Y to turn on/off head control (very experimental, I don't recommend trying that, it can break your duck's head)
 - left and right triggers to control the left and right antennas
 - LB (new!) press and hold to increase the walking frequency, kind of a sprint mode 🙂
+- RB (fork addition) to cycle the eyes: blink -> on -> off
 ```
+
 ### Start the walk at power-on (fork addition)
 
 `systemd/duck-walk.service` runs the walk with the Xbox controller from boot.
