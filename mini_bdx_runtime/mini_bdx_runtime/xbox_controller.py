@@ -20,6 +20,31 @@ HEAD_ROLL_RANGE = [-0.5, 0.5]
 # read for this long, e.g. when the reading thread is stuck or crashed.
 WATCHDOG_TIMEOUT = 0.5  # s
 
+# Released sticks read up to ~0.035 on the duck's controller. The policy steps
+# when the command is above ~0.01, so drift alone made the duck walk.
+STICK_DEADZONE = 0.1
+
+
+def apply_deadzone(value, deadzone=STICK_DEADZONE):
+    # Zero inside the deadzone, then rescaled so the output starts at 0 and
+    # still reaches +-1 at full deflection.
+    if abs(value) < deadzone:
+        return 0.0
+    return float(np.sign(value) * (abs(value) - deadzone) / (1 - deadzone))
+
+
+def poll_events():
+    # pygame 2.6.0 raises SystemError (from KeyError) when a joystick is added,
+    # removed and added again before the events are read. This happens on the
+    # first connection after boot, when the kernel rebinds the controller from
+    # hid-generic to hid-microsoft. The events are lost; callers fall back to
+    # pygame.joystick.get_count().
+    try:
+        return pygame.event.get()
+    except SystemError as e:
+        print(f"Controller events lost: {e!r} (cause {e.__cause__!r})")
+        return []
+
 
 def neutral_commands():
     # Same layout as get_commands(): commands, A, B, X, Y, LB, RB, LT, RT, dpad up/down
@@ -58,7 +83,7 @@ class XBoxController:
     def wait_for_joystick(self):
         announced = False
         while self.p1 is None:
-            pygame.event.get()  # lets SDL notice newly connected devices
+            poll_events()  # lets SDL notice newly connected devices
             if pygame.joystick.get_count() > 0:
                 self.open_joystick(0)
                 break
@@ -95,7 +120,7 @@ class XBoxController:
             time.sleep(1 / self.command_freq)
 
     def get_commands(self):
-        events = pygame.event.get()
+        events = poll_events()
         for event in events:
             if (
                 event.type == pygame.JOYDEVICEREMOVED
@@ -107,6 +132,15 @@ class XBoxController:
             elif event.type == pygame.JOYDEVICEADDED and self.p1 is None:
                 self.open_joystick(event.device_index)
 
+        # Device events can be lost (see poll_events), so check the count too.
+        count = pygame.joystick.get_count()
+        if self.p1 is not None and count == 0:
+            print("Controller disconnected, commands set to zero")
+            self.p1 = None
+            self.p1_instance_id = None
+        elif self.p1 is None and count > 0:
+            self.open_joystick(0)
+
         if self.p1 is None:
             self.worker_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             self.release_buttons()
@@ -114,10 +148,10 @@ class XBoxController:
 
         last_commands = self.worker_commands
 
-        l_x = -1 * self.p1.get_axis(0)
-        l_y = -1 * self.p1.get_axis(1)
-        r_x = -1 * self.p1.get_axis(2)
-        r_y = -1 * self.p1.get_axis(3)
+        l_x = -1 * apply_deadzone(self.p1.get_axis(0))
+        l_y = -1 * apply_deadzone(self.p1.get_axis(1))
+        r_x = -1 * apply_deadzone(self.p1.get_axis(2))
+        r_y = -1 * apply_deadzone(self.p1.get_axis(3))
 
         right_trigger = np.around((self.p1.get_axis(4) + 1) / 2, 3)
         left_trigger = np.around((self.p1.get_axis(5) + 1) / 2, 3)

@@ -42,7 +42,7 @@ class FakeJoystick:
 
 @pytest.fixture
 def fake_pygame(monkeypatch):
-    state = SimpleNamespace(count=1, events=[], opened=[])
+    state = SimpleNamespace(count=1, events=[], opened=[], event_errors=0)
 
     def make_joystick(device_index):
         j = FakeJoystick(device_index, instance_id=len(state.opened))
@@ -50,6 +50,13 @@ def fake_pygame(monkeypatch):
         return j
 
     def get_events():
+        if state.event_errors:
+            # pygame 2.6.0 raises this when a joystick is added, removed and
+            # added again before the events are read (first connection after
+            # boot, while the kernel rebinds hid-generic to hid-microsoft).
+            state.event_errors -= 1
+            state.events = []
+            raise SystemError("<built-in function get> returned a result with an exception set")
         events, state.events = state.events, []
         return events
 
@@ -91,6 +98,7 @@ def test_disconnect_gives_zero_commands_and_reconnect_restores_input(fake_pygame
     c.p1.axes[1] = -1.0
     assert c.get_commands()[0][0] == pytest.approx(0.15)
 
+    fake_pygame.count = 0
     fake_pygame.events = [SimpleNamespace(type=pygame.JOYDEVICEREMOVED, instance_id=0)]
     out = c.get_commands()
     assert c.p1 is None
@@ -100,6 +108,7 @@ def test_disconnect_gives_zero_commands_and_reconnect_restores_input(fake_pygame
     # still disconnected: stays at zero
     np.testing.assert_allclose(c.get_commands()[0], np.zeros(7))
 
+    fake_pygame.count = 1
     fake_pygame.events = [SimpleNamespace(type=pygame.JOYDEVICEADDED, device_index=0)]
     c.get_commands()
     assert c.p1 is fake_pygame.opened[1]
@@ -128,3 +137,59 @@ def test_watchdog_zeroes_commands_when_no_fresh_command(fake_pygame, monkeypatch
 
     now[0] += xc.WATCHDOG_TIMEOUT
     np.testing.assert_allclose(c.get_last_command()[0], np.zeros(7))
+
+
+def test_event_error_while_waiting_still_connects(fake_pygame, monkeypatch):
+    fake_pygame.count = 0
+    sleeps = []
+
+    def fake_sleep(s):
+        sleeps.append(s)
+        if len(sleeps) == 2:
+            fake_pygame.count = 1
+            fake_pygame.event_errors = 1
+
+    monkeypatch.setattr(xc.time, "sleep", fake_sleep)
+    c = make_controller()
+    assert c.p1 is fake_pygame.opened[0]
+
+
+def test_event_error_hiding_reconnect_is_recovered_from_count(fake_pygame):
+    c = make_controller()
+    fake_pygame.count = 0
+    fake_pygame.events = [SimpleNamespace(type=pygame.JOYDEVICEREMOVED, instance_id=0)]
+    c.get_commands()
+    assert c.p1 is None
+
+    # the JOYDEVICEADDED event is lost in the failing event.get()
+    fake_pygame.count = 1
+    fake_pygame.event_errors = 1
+    c.get_commands()
+    c.get_commands()
+    assert c.p1 is fake_pygame.opened[1]
+
+
+def test_event_error_hiding_disconnect_is_recovered_from_count(fake_pygame):
+    c = make_controller()
+    c.p1.axes[1] = -1.0
+    fake_pygame.count = 0
+    fake_pygame.event_errors = 1  # the JOYDEVICEREMOVED event is lost
+    out = c.get_commands()
+    assert c.p1 is None
+    np.testing.assert_allclose(out[0], np.zeros(7))
+
+
+def test_stick_drift_gives_exact_zero_commands(fake_pygame):
+    c = make_controller()
+    # raw axes measured on the duck with the sticks released (2026-11-26)
+    c.p1.axes[:4] = [0.009, 0.035, -0.008, -0.023]
+    cmds = c.get_commands()[0]
+    np.testing.assert_array_equal(cmds[:3], np.zeros(3))
+
+
+def test_deadzone_keeps_full_range_and_starts_from_zero(fake_pygame):
+    c = make_controller()
+    c.p1.axes[1] = -1.0  # full forward
+    assert c.get_commands()[0][0] == pytest.approx(0.15)
+    c.p1.axes[1] = -(xc.STICK_DEADZONE + 0.01)  # just past the deadzone
+    assert 0 < c.get_commands()[0][0] < 0.01
