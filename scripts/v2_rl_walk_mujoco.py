@@ -66,6 +66,12 @@ class RLWalk:
                 self.control_freq, cutoff_frequency
             )
 
+        # Wait for the controller before touching the servos, so that the duck
+        # stays limp after power-on until someone can drive it (systemd start).
+        self.command_freq = 20  # hz
+        if self.commands:
+            self.xbox_controller = XBoxController(self.command_freq)
+
         self.hwi = HWI(self.duck_config, serial_port)
 
         self.start()
@@ -95,10 +101,6 @@ class RLWalk:
         self.last_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
         self.paused = self.duck_config.start_paused
-
-        self.command_freq = 20  # hz
-        if self.commands:
-            self.xbox_controller = XBoxController(self.command_freq)
 
         # Reference motion, but we only really need the length of one phase
         # TODO

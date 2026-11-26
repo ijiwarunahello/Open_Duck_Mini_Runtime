@@ -190,3 +190,21 @@ Download the [latest policy checkpoint ](https://github.com/apirrone/Open_Duck_M
 - left and right triggers to control the left and right antennas
 - LB (new!) press and hold to increase the walking frequency, kind of a sprint mode 🙂
 ```
+### Start the walk at power-on (fork addition)
+
+`systemd/duck-walk.service` runs the walk with the Xbox controller from boot.
+The script waits for the controller before touching the servos, so the duck
+stays limp until you connect. When the script ends (`systemctl stop`, an
+exception or a kill) the servos are turned off and the service is not
+restarted.
+
+```bash
+sudo cp systemd/duck-walk.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now duck-walk
+journalctl -u duck-walk -f
+```
+
+- Stop it before running other scripts that use the servos (bench, offsets): `sudo systemctl stop duck-walk`.
+- Use another model or paths with `sudo systemctl edit duck-walk` (e.g. `Environment=DUCK_ONNX=/home/duck/other.onnx`).
+- If you enable `speaker` in `duck_config.json`, make the speaker the ALSA default (`/etc/asound.conf`): there is no PipeWire session under systemd, and `Sounds` fails to start on a missing HDMI output.

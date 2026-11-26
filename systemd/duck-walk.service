@@ -1,0 +1,34 @@
+# Walk with the Xbox controller from power-on (fork addition).
+#
+# The script waits for the controller before touching the servos, so the duck
+# stays limp until someone connects. When the script ends for any reason
+# (systemctl stop, exception, kill) the servos are turned off and the service is
+# not restarted: power-cycle the duck or `sudo systemctl start duck-walk`.
+#
+# Paths assume the user `duck` and the repository at ~/Open_Duck_Mini_Runtime
+# with its uv virtual environment (.venv). Override with
+# `sudo systemctl edit duck-walk` if yours differ.
+
+[Unit]
+Description=Open Duck Mini walk (Xbox controller)
+Wants=bluetooth.target
+After=bluetooth.target
+
+[Service]
+Type=simple
+User=duck
+WorkingDirectory=/home/duck/Open_Duck_Mini_Runtime/scripts
+Environment=DUCK_ONNX=/home/duck/BEST_WALK_ONNX_2.onnx
+# No display under systemd; pygame only needs the joystick and event queue.
+Environment=SDL_VIDEODRIVER=dummy
+# The venv's python, not `uv run`: uv would re-sync and drop packages
+# installed by hand on the Pi (RPi.GPIO).
+ExecStart=/home/duck/Open_Duck_Mini_Runtime/.venv/bin/python -u v2_rl_walk_mujoco.py --onnx_model_path ${DUCK_ONNX}
+ExecStopPost=/home/duck/Open_Duck_Mini_Runtime/.venv/bin/python -u turn_off.py
+# The script cleans up only on KeyboardInterrupt.
+KillSignal=SIGINT
+TimeoutStopSec=10
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
