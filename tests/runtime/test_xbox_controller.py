@@ -177,3 +177,19 @@ def test_event_error_hiding_disconnect_is_recovered_from_count(fake_pygame):
     out = c.get_commands()
     assert c.p1 is None
     np.testing.assert_allclose(out[0], np.zeros(7))
+
+
+def test_stick_drift_gives_exact_zero_commands(fake_pygame):
+    c = make_controller()
+    # raw axes measured on the duck with the sticks released (2026-11-26)
+    c.p1.axes[:4] = [0.009, 0.035, -0.008, -0.023]
+    cmds = c.get_commands()[0]
+    np.testing.assert_array_equal(cmds[:3], np.zeros(3))
+
+
+def test_deadzone_keeps_full_range_and_starts_from_zero(fake_pygame):
+    c = make_controller()
+    c.p1.axes[1] = -1.0  # full forward
+    assert c.get_commands()[0][0] == pytest.approx(0.15)
+    c.p1.axes[1] = -(xc.STICK_DEADZONE + 0.01)  # just past the deadzone
+    assert 0 < c.get_commands()[0][0] < 0.01
