@@ -32,6 +32,35 @@ CONTENT_TYPES = {
     ".webp": "image/webp",
 }
 RECONNECT_DELAY_S = 2.0
+STATE_PERIOD_S = 0.1
+
+
+class StateRelay:
+    """Latest /state.json from the Pi, polled in the background."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._body = b'{"state": null, "age_s": null}'
+
+    def put(self, body: bytes) -> None:
+        with self._lock:
+            self._body = body
+
+    def get(self) -> bytes:
+        with self._lock:
+            return self._body
+
+
+def poll_state(url: str, relay: StateRelay, stop: threading.Event) -> None:
+    while not stop.is_set():
+        try:
+            with urllib.request.urlopen(url, timeout=1) as r:
+                relay.put(r.read())
+        except OSError:
+            relay.put(b'{"state": null, "age_s": null}')
+            stop.wait(RECONNECT_DELAY_S)
+            continue
+        stop.wait(STATE_PERIOD_S)
 
 
 def pull_stream(url: str, latest: LatestFrame, stop: threading.Event, log=print) -> None:
@@ -71,7 +100,9 @@ def load_pet(pet_dir: str | None) -> tuple[dict | None, str | None]:
 
 
 def make_server(latest: LatestFrame, pet_meta: dict | None, pet_sheet: str | None, port: int,
-                host: str = "127.0.0.1") -> ThreadingHTTPServer:
+                host: str = "127.0.0.1", relay: StateRelay | None = None) -> ThreadingHTTPServer:
+    relay = relay or StateRelay()
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass
@@ -101,6 +132,8 @@ def make_server(latest: LatestFrame, pet_meta: dict | None, pet_sheet: str | Non
                     self._send(204, b"", "image/jpeg")
                 else:
                     self._send(200, frame, "image/jpeg")
+            elif path == "/state.json":
+                self._send(200, relay.get(), CONTENT_TYPES[".json"])
             elif path == "/status.json":
                 self._send(200, json.dumps({"frame_age_s": latest.age()}).encode(), CONTENT_TYPES[".json"])
             elif path == "/pet.json":
@@ -130,7 +163,10 @@ def main() -> None:
     stop = threading.Event()
     threading.Thread(target=pull_stream, args=(args.pi.rstrip("/") + "/stream.mjpg", latest, stop),
                      daemon=True).start()
-    server = make_server(latest, pet_meta, pet_sheet, args.port)
+    relay = StateRelay()
+    threading.Thread(target=poll_state, args=(args.pi.rstrip("/") + "/state.json", relay, stop),
+                     daemon=True).start()
+    server = make_server(latest, pet_meta, pet_sheet, args.port, relay=relay)
     print(f"duck-vision booth: http://localhost:{args.port}  (camera {args.pi}, pet {args.pet or 'none'})")
     try:
         server.serve_forever()

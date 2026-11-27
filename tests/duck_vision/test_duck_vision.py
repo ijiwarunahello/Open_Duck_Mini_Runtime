@@ -99,3 +99,43 @@ def test_booth_without_pet_returns_404():
             assert e.code == 404
     finally:
         booth.shutdown()
+
+
+def test_telemetry_relayed_from_walk_script_to_booth():
+    import socket
+
+    from mini_bdx_runtime.mini_bdx_runtime.telemetry import Telemetry
+
+    robot = pi_stream.RobotState()
+    udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp.bind(("127.0.0.1", 0))
+    stop = threading.Event()
+    threading.Thread(target=pi_stream.listen_telemetry, args=(robot, udp, stop), daemon=True).start()
+    pi = pi_stream.make_server(LatestFrame(), 0, host="127.0.0.1", robot=robot)
+    pi_url = serve(pi)
+
+    relay = booth_server.StateRelay()
+    threading.Thread(target=booth_server.poll_state, args=(pi_url + "/state.json", relay, stop), daemon=True).start()
+    booth = booth_server.make_server(LatestFrame(), None, None, 0, relay=relay)
+    url = serve(booth)
+    try:
+        with urllib.request.urlopen(url + "/state.json") as r:
+            assert json.load(r)["state"] is None
+
+        tx = Telemetry(udp.getsockname(), rate_hz=1000)
+        imu = {"accelero": [0.0, 0.0, 9.8], "gyro": [0.0, 0.0, 0.0]}
+
+        def relayed():
+            tx.send(False, [0.1, 0, 0, 0, 0, 0, 0], imu)
+            return json.loads(relay.get())["state"] is not None
+
+        wait_for(relayed)
+        with urllib.request.urlopen(url + "/state.json") as r:
+            body = json.load(r)
+        assert body["state"]["cmd"][0] == 0.1 and body["state"]["paused"] is False
+        assert body["age_s"] < 1.0
+    finally:
+        stop.set()
+        pi.shutdown()
+        booth.shutdown()
+        udp.close()

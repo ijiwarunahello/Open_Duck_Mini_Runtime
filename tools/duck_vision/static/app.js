@@ -1,6 +1,9 @@
 // Duck-vision booth page.
 // Operator keys: Space = photo, R = rotate camera 90°, P = palette, M = sound on/off, F = fullscreen.
-// URL params (optional): rot=0|90|180|270, enter=12, exit=6 (motion thresholds, 0-255).
+// URL params (optional): rot=0|90|180|270, enter=12, exit=6 (motion thresholds, 0-255),
+// fall=55 (tilt in degrees that counts as fallen).
+// The walk script's telemetry (/state.json) drives the pet when it is fresh; the image
+// motion estimate is only a fallback.
 "use strict";
 
 const params = new URLSearchParams(location.search);
@@ -75,7 +78,7 @@ function ditherInto(img) {
 function updateMotion(luma, now) {
   const prev = state.prevLuma;
   state.prevLuma = luma;
-  if (!prev || prev.length !== luma.length) return;
+  if (!prev || prev.length !== luma.length || tel.ok) return;
   let sum = 0;
   for (let i = 0; i < luma.length; i++) sum += Math.abs(luma[i] - prev[i]);
   state.motion = 0.7 * state.motion + 0.3 * (sum / luma.length);
@@ -113,10 +116,82 @@ async function frameLoop() {
     } catch (e) { /* server restarting; try again */ }
     const now = performance.now();
     if (state.cameraOk && now - state.lastFrameAt > 3000) {
-      state.cameraOk = false; state.walking = false; state.prevLuma = null;
-      pet.play("failed", "waiting"); say("cameraLost");
+      state.cameraOk = false; state.prevLuma = null;
+      if (!tel.ok) { state.walking = false; pet.play("failed", "waiting"); }
+      say("cameraLost");
     }
     await sleep(Math.max(0, 100 - (performance.now() - started)));
+  }
+}
+
+// ---------------------------------------------------------------- robot telemetry
+// state: {paused, cmd: [vx, vy, wz, ...head], acc: [x, y, z] (Z up, +9.8 standing), gyro}
+const tel = {
+  ok: false, fallen: false, fallSince: 0, uprightSince: 0, stopSince: 0,
+  lastPaused: null, liftedAt: -1e9, fallDeg: Number(params.get("fall") ?? 55),
+};
+
+function onTelemetry(s, now) {
+  const [ax, ay, az] = s.acc;
+  const g = Math.hypot(ax, ay, az) || 1;
+  const tilt = Math.acos(Math.max(-1, Math.min(1, az / g))) * 180 / Math.PI;
+
+  if (!tel.fallen) {
+    if (tilt > tel.fallDeg) {
+      tel.fallSince ||= now;
+      if (now - tel.fallSince > 300) {
+        tel.fallen = true; tel.uprightSince = 0; state.walking = false;
+        pet.play("failed", "waiting"); say("fall", true);
+        return;
+      }
+    } else tel.fallSince = 0;
+  } else {
+    if (tilt < 20) {
+      tel.uprightSince ||= now;
+      if (now - tel.uprightSince > 1000) {
+        tel.fallen = false; tel.fallSince = 0;
+        pet.play("jumping", "idle"); say("recover", true);
+      }
+    } else tel.uprightSince = 0;
+    return;
+  }
+
+  if (s.paused !== tel.lastPaused) {
+    if (tel.lastPaused !== null) {
+      if (s.paused) { pet.play("waiting"); say("pause"); } else { pet.play("idle"); say("resume"); }
+    }
+    tel.lastPaused = s.paused;
+  }
+  if (s.paused) {
+    state.walking = false;
+    if (Math.abs(g - 9.81) > 4 && now - tel.liftedAt > 8000) {
+      tel.liftedAt = now; pet.play("jumping", "waiting"); say("lifted", true);
+    }
+    return;
+  }
+
+  const [vx, vy, wz] = s.cmd;
+  const moving = Math.abs(vx) > 0.02 || Math.abs(vy) > 0.02 || Math.abs(wz) > 0.15;
+  const anim = Math.abs(wz) > 0.15 && Math.abs(vx) < 0.04 ? (wz > 0 ? "running-left" : "running-right") : "running";
+  if (moving) {
+    tel.stopSince = 0;
+    if (!state.walking) { state.walking = true; pet.play("jumping", anim); say("walkStart"); }
+    else if (pet.current.startsWith("running") && pet.current !== anim) pet.play(anim);
+  } else if (state.walking) {
+    tel.stopSince ||= now;
+    if (now - tel.stopSince > 600) { state.walking = false; pet.play("idle"); say("walkStop"); }
+  }
+}
+
+async function stateLoop() {
+  for (;;) {
+    try {
+      const j = await (await fetch("/state.json", { cache: "no-store" })).json();
+      const fresh = j.state && j.age_s !== null && j.age_s < 1.0;
+      if (fresh) { tel.ok = true; onTelemetry(j.state, performance.now()); }
+      else if (tel.ok) { tel.ok = false; tel.fallen = false; tel.lastPaused = null; }
+    } catch (e) { tel.ok = false; }
+    await sleep(100);
   }
 }
 
@@ -221,6 +296,11 @@ const LINES = {
   photo: ["はい、ちーず", "とれた!", "いい しゃしん!"],
   cameraLost: ["あれ? め が みえない…"],
   cameraBack: ["みえた!"],
+  fall: ["わっ!", "うわわ、ころんだ!", "びっくりした!"],
+  recover: ["よいしょ、ありがとう", "おきあがれた!"],
+  pause: ["ひとやすみ", "ちょっと まってね"],
+  resume: ["さあ、いくよ"],
+  lifted: ["わわ、たかい!", "とんでるみたい!"],
   idle: [
     "みんな おおきく みえるよ",
     "ぼく の め には こう みえてるんだ",
@@ -263,7 +343,7 @@ function say(kind, force = false) {
 
 function idleChatter() {
   const now = performance.now();
-  if (state.cameraOk && now > speech.nextIdleAt && now > speech.busyUntil) {
+  if ((state.cameraOk || tel.ok) && !tel.fallen && now > speech.nextIdleAt && now > speech.busyUntil) {
     if (!state.walking) pet.play("review");
     say("idle");
     setTimeout(() => { if (pet.current === "review") pet.play(state.walking ? "running" : "idle"); }, 4000);
@@ -327,4 +407,5 @@ pet.load().then(() => {
   setInterval(() => pet.tick(), 125);
   setInterval(idleChatter, 1000);
   frameLoop();
+  stateLoop();
 });

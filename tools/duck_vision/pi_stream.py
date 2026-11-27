@@ -7,14 +7,20 @@ visitors). Nothing is written to disk.
     .venv/bin/python -m tools.duck_vision.pi_stream            # on the Pi
     python -m tools.duck_vision.pi_stream --fake DIR            # on a PC, cycles DIR/*.jpg
 
-Routes: /stream.mjpg (multipart), /frame.jpg (latest), /health (json).
+Routes: /stream.mjpg (multipart), /frame.jpg (latest), /state.json, /health (json).
+
+/state.json relays the walk script's telemetry datagrams (`--telemetry 127.0.0.1:8092` or
+DUCK_TELEMETRY on the walk script): paused flag, stick commands, accelerometer, gyro.
 Stop it (Ctrl-C / kill) and the camera is released; the walk script is not involved.
 """
+
+from __future__ import annotations
 
 import argparse
 import glob
 import json
 import os
+import socket
 import subprocess
 import threading
 import time
@@ -23,6 +29,41 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from tools.duck_vision.mjpeg import BOUNDARY, FrameSplitter, LatestFrame, multipart_chunk
 
 RESTART_DELAY_S = 2.0
+
+
+class RobotState:
+    """Latest telemetry datagram from the walk script."""
+
+    def __init__(self, clock=time.monotonic) -> None:
+        self._lock = threading.Lock()
+        self._state: dict | None = None
+        self._at = 0.0
+        self._clock = clock
+
+    def put(self, state: dict) -> None:
+        with self._lock:
+            self._state, self._at = state, self._clock()
+
+    def snapshot(self) -> dict:
+        with self._lock:
+            if self._state is None:
+                return {"state": None, "age_s": None}
+            return {"state": self._state, "age_s": round(self._clock() - self._at, 3)}
+
+
+def listen_telemetry(robot: RobotState, sock: socket.socket, stop: threading.Event) -> None:
+    sock.settimeout(1.0)
+    while not stop.is_set():
+        try:
+            data = sock.recv(4096)
+        except socket.timeout:
+            continue
+        except OSError:
+            return
+        try:
+            robot.put(json.loads(data))
+        except ValueError:
+            pass
 
 
 def rpicam_command(width: int, height: int, fps: int, quality: int) -> list[str]:
@@ -75,7 +116,10 @@ def run_fake(latest: LatestFrame, directory: str, fps: int, stop: threading.Even
         stop.wait(1.0 / fps)
 
 
-def make_server(latest: LatestFrame, port: int, host: str = "0.0.0.0") -> ThreadingHTTPServer:
+def make_server(latest: LatestFrame, port: int, host: str = "0.0.0.0",
+                robot: RobotState | None = None) -> ThreadingHTTPServer:
+    robot = robot or RobotState()
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass
@@ -97,6 +141,8 @@ def make_server(latest: LatestFrame, port: int, host: str = "0.0.0.0") -> Thread
                     self._send(503, b"no frame yet", "text/plain")
                 else:
                     self._send(200, frame, "image/jpeg")
+            elif path == "/state.json":
+                self._send(200, json.dumps(robot.snapshot()).encode(), "application/json")
             elif path == "/health":
                 age = latest.age()
                 self._send(200, json.dumps({"frame_age_s": age}).encode(), "application/json")
@@ -136,6 +182,7 @@ def main() -> None:
     ap.add_argument("--fps", type=int, default=10)
     ap.add_argument("--quality", type=int, default=80)
     ap.add_argument("--fake", metavar="DIR", help="cycle DIR/*.jpg instead of the camera")
+    ap.add_argument("--telemetry-port", type=int, default=8092, help="UDP port the walk script sends to")
     args = ap.parse_args()
 
     latest = LatestFrame()
@@ -147,7 +194,12 @@ def main() -> None:
         target = lambda: run_camera(latest, cmd, stop)  # noqa: E731
     threading.Thread(target=target, daemon=True).start()
 
-    server = make_server(latest, args.port)
+    robot = RobotState()
+    udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp.bind(("127.0.0.1", args.telemetry_port))
+    threading.Thread(target=listen_telemetry, args=(robot, udp, stop), daemon=True).start()
+
+    server = make_server(latest, args.port, robot=robot)
     print(f"duck-vision: http://0.0.0.0:{args.port}/stream.mjpg ({args.width}x{args.height} @ {args.fps} fps)")
     try:
         server.serve_forever()
