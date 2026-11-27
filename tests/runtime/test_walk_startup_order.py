@@ -41,6 +41,7 @@ def install_fakes(monkeypatch, events):
             self.imu_accel_bias = [0.0, 0.0, 0.0]
             self.start_paused = False
             self.phase_frequency_factor_offset = 0.0
+            self.command_decel_time = 0.4
             self.eyes = self.projector = self.speaker = self.antennas = False
 
     class Noop:
@@ -60,6 +61,7 @@ def install_fakes(monkeypatch, events):
         "projector": {"Projector": Noop},
         "rl_utils": {"make_action_dict": Noop, "LowPassActionFilter": Noop},
         "duck_config": {"DuckConfig": FakeDuckConfig},
+        "command_ramp": {"DecelRamp": Noop},
     }
     package = types.ModuleType("mini_bdx_runtime")
     package.__path__ = []

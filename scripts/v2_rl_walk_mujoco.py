@@ -15,6 +15,7 @@ from mini_bdx_runtime.antennas import Antennas
 from mini_bdx_runtime.projector import Projector
 from mini_bdx_runtime.rl_utils import make_action_dict, LowPassActionFilter
 from mini_bdx_runtime.duck_config import DuckConfig
+from mini_bdx_runtime.command_ramp import DecelRamp
 
 import os
 
@@ -99,6 +100,9 @@ class RLWalk:
         self.prev_motor_targets = np.array(self.init_pos.copy())
 
         self.last_commands = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.command_ramp = DecelRamp(
+            self.duck_config.command_decel_time, 1 / self.control_freq
+        )
 
         self.paused = self.duck_config.start_paused
 
@@ -257,6 +261,8 @@ class RLWalk:
                 if self.paused:
                     time.sleep(0.1)
                     continue
+
+                self.last_commands = self.command_ramp.apply(self.last_commands)
 
                 obs = self.get_obs()
                 if obs is None:
