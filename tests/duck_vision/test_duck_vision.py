@@ -1,0 +1,101 @@
+import json
+import threading
+import time
+import urllib.request
+
+from tools.duck_vision import booth_server, pi_stream
+from tools.duck_vision.mjpeg import FrameSplitter, LatestFrame, multipart_chunk
+
+
+def jpeg(tag: bytes) -> bytes:
+    # Entropy data never contains a bare FF D9; FF 00 is byte stuffing.
+    return b"\xff\xd8" + tag + b"\xff\x00\x12" + b"\xff\xd9"
+
+
+def test_splitter_handles_chunk_boundaries_and_garbage():
+    a, b = jpeg(b"A"), jpeg(b"B")
+    stream = b"junk" + a + b"\r\n--x\r\n" + b
+    s = FrameSplitter()
+    frames = []
+    for i in range(len(stream)):  # one byte at a time is the worst case
+        frames += s.feed(stream[i : i + 1])
+    assert frames == [a, b]
+
+
+def test_splitter_reads_multipart_stream():
+    frames = [jpeg(bytes([i])) for i in range(3)]
+    s = FrameSplitter()
+    assert s.feed(b"".join(multipart_chunk(f) for f in frames)) == frames
+
+
+def test_rpicam_command_asks_camera_for_tiny_frames():
+    cmd = pi_stream.rpicam_command(64, 48, 10, 80)
+    assert cmd[:3] == ["nice", "-n", "10"]
+    assert cmd[cmd.index("--width") + 1] == "64" and cmd[cmd.index("--height") + 1] == "48"
+    assert cmd[cmd.index("--codec") + 1] == "mjpeg" and cmd[-2:] == ["-o", "-"]
+
+
+def serve(server):
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def wait_for(cond, timeout=5.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if cond():
+            return
+        time.sleep(0.02)
+    raise AssertionError("timed out")
+
+
+def test_booth_relays_pi_stream_and_pet(tmp_path):
+    pi_latest = LatestFrame()
+    pi = pi_stream.make_server(pi_latest, 0, host="127.0.0.1")
+    pi_url = serve(pi)
+
+    (tmp_path / "pet.json").write_text(json.dumps({"id": "duck", "spritesheetPath": "spritesheet.webp"}))
+    (tmp_path / "spritesheet.webp").write_bytes(b"RIFFsheet")
+    meta, sheet = booth_server.load_pet(str(tmp_path))
+    booth_latest = LatestFrame()
+    stop = threading.Event()
+    threading.Thread(target=booth_server.pull_stream, args=(pi_url + "/stream.mjpg", booth_latest, stop, lambda m: None),
+                     daemon=True).start()
+    booth = booth_server.make_server(booth_latest, meta, sheet, 0)
+    url = serve(booth)
+    try:
+        with urllib.request.urlopen(url + "/frame.jpg") as r:
+            assert r.status == 204  # no frame yet
+
+        def frame_relayed(f):
+            pi_latest.put(f)  # keep publishing until the relay has connected
+            return booth_latest.get()[1] == f
+
+        wait_for(lambda: frame_relayed(jpeg(b"one")))
+        with urllib.request.urlopen(url + "/frame.jpg") as r:
+            assert r.read() == jpeg(b"one")
+        with urllib.request.urlopen(url + "/pet.json") as r:
+            assert json.load(r)["id"] == "duck"
+        with urllib.request.urlopen(url + "/pet-sheet") as r:
+            assert r.read() == b"RIFFsheet"
+        with urllib.request.urlopen(url + "/") as r:
+            assert b"duck" in r.read()
+        with urllib.request.urlopen(url + "/static/app.js") as r:
+            assert r.status == 200
+    finally:
+        stop.set()
+        pi.shutdown()
+        booth.shutdown()
+
+
+def test_booth_without_pet_returns_404():
+    booth = booth_server.make_server(LatestFrame(), None, None, 0)
+    url = serve(booth)
+    try:
+        try:
+            urllib.request.urlopen(url + "/pet.json")
+            raise AssertionError("expected 404")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+    finally:
+        booth.shutdown()
