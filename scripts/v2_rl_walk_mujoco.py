@@ -35,9 +35,21 @@ class RLWalk:
         save_obs=False,
         replay_obs=None,
         cutoff_frequency=None,
+        telemetry=None,
     ):
 
         self.duck_config = DuckConfig(config_json_path=duck_config_path)
+
+        # Optional state broadcast for the booth display (tools/duck_vision), off by default.
+        self.telemetry = None
+        if telemetry:
+            try:
+                from mini_bdx_runtime.telemetry import Telemetry, parse_address
+
+                self.telemetry = Telemetry(parse_address(telemetry))
+                print(f"Telemetry: {telemetry}")
+            except Exception as e:  # the display is optional; walking is not
+                print(f"Telemetry disabled: {e}")
 
         self.commands = commands
         self.pitch_bias = pitch_bias
@@ -254,6 +266,13 @@ class RLWalk:
                         else:
                             print("UNPAUSE")
 
+                if self.telemetry is not None and self.telemetry.due():
+                    # While paused the policy does not read the IMU, so taking a sample is
+                    # safe; while walking, reuse the policy's last sample (get_data()
+                    # consumes the queue and would steal it from the policy).
+                    imu_data = self.imu.get_data() if self.paused else self.imu.last_imu_data
+                    self.telemetry.send(self.paused, self.last_commands, imu_data)
+
                 if self.paused:
                     time.sleep(0.1)
                     continue
@@ -387,6 +406,12 @@ if __name__ == "__main__":
         help="replay the observations from a previous run (can be from the robot or from mujoco)",
     )
     parser.add_argument("--cutoff_frequency", type=float, default=None)
+    parser.add_argument(
+        "--telemetry",
+        type=str,
+        default=os.environ.get("DUCK_TELEMETRY"),
+        help="HOST:PORT to send state datagrams to (booth display). Default: $DUCK_TELEMETRY, off when unset",
+    )
 
     args = parser.parse_args()
     pid = [args.p, args.i, args.d]
@@ -403,6 +428,7 @@ if __name__ == "__main__":
         save_obs=args.save_obs,
         replay_obs=args.replay_obs,
         cutoff_frequency=args.cutoff_frequency,
+        telemetry=args.telemetry,
     )
     print("Done instantiating RLWalk")
     rl_walk.run()
