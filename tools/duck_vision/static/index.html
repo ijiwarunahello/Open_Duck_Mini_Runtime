@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>duck から みた せかい</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <section class="face" aria-label="duck">
+    <p class="bubble" id="bubble" aria-live="polite"></p>
+    <canvas id="pet" width="192" height="208" aria-label="duck の アニメーション"></canvas>
+  </section>
+  <section class="eye">
+    <h1>duck から みた せかい</h1>
+    <div class="frame">
+      <canvas id="view" width="48" height="64" aria-label="duck の カメラ を ドット絵 に した えいぞう"></canvas>
+      <div class="photo" id="photo" hidden>
+        <canvas id="photoCanvas" width="48" height="64"></canvas>
+        <span>duck が とった しゃしん</span>
+      </div>
+      <div class="flash" id="flash"></div>
+    </div>
+  </section>
+</main>
+<button class="sound" id="sound" type="button">音を出す</button>
+<script src="/static/app.js"></script>
+</body>
+</html>
