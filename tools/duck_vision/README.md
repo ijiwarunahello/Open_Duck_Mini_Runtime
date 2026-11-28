@@ -13,7 +13,7 @@ Pi: rpicam-vid (64x48 MJPEG) → pi_stream.py :8091 ──Wi-Fi──▶ Mac: bo
 ## Pi
 
 ```sh
-cd ~/duck-vision        # このブランチの worktree (下の「入れ方」)
+cd ~/duck-vision        # v2_iji の worktree (下の「入れ方」)
 python3 -m tools.duck_vision.pi_stream
 ```
 
@@ -76,8 +76,8 @@ Codex pet のアトラス (8 列 × 9 行、192×208) の行をそのまま使�
 ```sh
 # Pi と Mac それぞれで
 cd ~/Open_Duck_Mini_Runtime     # Mac は自分の clone の場所
-git fetch origin feat/duck-vision
-git worktree add ~/duck-vision origin/feat/duck-vision
+git fetch origin v2_iji
+git worktree add ~/duck-vision origin/v2_iji
 ```
 
 ## pet を作る (Mac の Codex)
