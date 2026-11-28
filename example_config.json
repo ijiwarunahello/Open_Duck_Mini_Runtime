@@ -4,6 +4,7 @@
     "imu_flip_xy": false,
     "imu_accel_bias": [0.0, 0.0, 0.0],
     "phase_frequency_factor_offset": 0.0,
+    "command_decel_time": 0.4,
     "expression_features": {
         "eyes": false,
         "projector": false,

@@ -53,6 +53,11 @@ class DuckConfig:
         self.imu_accel_bias = self.json_config.get("imu_accel_bias", [0.0, 0.0, 0.0])
         if len(self.imu_accel_bias) != 3:
             raise ValueError("imu_accel_bias must be a list of 3 numbers [x, y, z]")
+        # see command_ramp.py. Seconds for a full-scale walk command to reach
+        # zero when the stick is released. 0 disables the ramp.
+        self.command_decel_time = self.json_config.get("command_decel_time", 0.4)
+        if self.command_decel_time < 0:
+            raise ValueError("command_decel_time must be >= 0")
         self.phase_frequency_factor_offset = self.json_config.get(
             "phase_frequency_factor_offset", 0.0
         )
