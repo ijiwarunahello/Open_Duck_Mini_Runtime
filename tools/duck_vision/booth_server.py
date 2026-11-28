@@ -33,6 +33,9 @@ CONTENT_TYPES = {
 }
 RECONNECT_DELAY_S = 2.0
 STATE_PERIOD_S = 0.1
+# The Pi sends 10 fps. Older than this, the stream has stopped: serve no frame, so the page
+# notices the lost camera (it shows "め が みえない" after 3 s without an image).
+STALE_FRAME_S = 1.0
 
 
 class StateRelay:
@@ -128,7 +131,8 @@ def make_server(latest: LatestFrame, pet_meta: dict | None, pet_sheet: str | Non
                 self._file(os.path.join(STATIC_DIR, path[len("/static/"):]))
             elif path == "/frame.jpg":
                 _, frame = latest.get()
-                if frame is None:
+                age = latest.age()
+                if frame is None or age is None or age > STALE_FRAME_S:
                     self._send(204, b"", "image/jpeg")
                 else:
                     self._send(200, frame, "image/jpeg")

@@ -88,6 +88,25 @@ def test_booth_relays_pi_stream_and_pet(tmp_path):
         booth.shutdown()
 
 
+def test_booth_stops_serving_a_stale_frame_when_the_pi_goes_away():
+    # LatestFrame keeps the last frame forever; the page only notices a lost camera when
+    # /frame.jpg stops returning images, so the booth must not replay an old one.
+    now = [0.0]
+    latest = LatestFrame(clock=lambda: now[0])
+    booth = booth_server.make_server(latest, None, None, 0)
+    url = serve(booth)
+    try:
+        latest.put(jpeg(b"last"))
+        now[0] = booth_server.STALE_FRAME_S - 0.1
+        with urllib.request.urlopen(url + "/frame.jpg") as r:
+            assert r.status == 200 and r.read() == jpeg(b"last")
+        now[0] = booth_server.STALE_FRAME_S + 0.1
+        with urllib.request.urlopen(url + "/frame.jpg") as r:
+            assert r.status == 204
+    finally:
+        booth.shutdown()
+
+
 def test_booth_without_pet_returns_404():
     booth = booth_server.make_server(LatestFrame(), None, None, 0)
     url = serve(booth)
